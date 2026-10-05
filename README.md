@@ -39,8 +39,10 @@ matters in one fast, keyboard-friendly workspace, then launches VS Code, Windows
 Terminal, GitHub Copilot CLI, or the relevant pull request when it is time to work.
 
 It is a native desktop application built with Tauri and an embedded React/WebView2
-renderer. The renderer communicates directly with the Rust backend through Tauri
-commands and events—there is no browser-hosted app or local HTTP/WebSocket API server.
+renderer. The embedded renderer communicates directly with the Rust backend through
+Tauri commands and events. Optional Remote surfaces expose only the scoped remote-control
+contract: Local Web runs an explicit LAN server, while hosted Remote Control uses an
+outbound SignalR connection to the configured Azure service.
 
 ## Why SWE Factory?
 
@@ -128,6 +130,23 @@ Save it as docs/images/swe-factory-pr-review.png, then replace this comment with
 - Receive signed updates through GitHub Releases after explicitly accepting the update.
 - Use the real developer tools already installed on your machine.
 
+### Remote control
+
+- Link one or more SWE Factory laptops to the hosted Remote web app with a short-lived
+  browser confirmation code.
+- Select an online host and use the existing remote Dashboard, Tasks, and Copilot
+  Sessions surfaces from another browser.
+- Keep inbound ports closed: the desktop maintains an authenticated outbound SignalR
+  connection and remains the source of truth.
+- Store only account, linked-host, and credential metadata in Azure. Task and session
+  content is relayed while the laptop is online rather than persisted by the service.
+- Keep the existing Local Web QR flow available as a local-network fallback.
+
+> [!WARNING]
+> Hosted Remote Control currently uses replaceable demo authentication and is not ready
+> for a public production deployment. TLS terminates at the relay, so live session
+> content is not end-to-end encrypted even though it is not stored by the service.
+
 ## Install
 
 SWE Factory currently ships as a signed **Windows x64 NSIS installer**.
@@ -173,6 +192,8 @@ React 19 + TypeScript renderer (WebView2)
           Tauri commands/events
                   │
 Rust backend ─ SQLite ─ Git / gh / az / Copilot CLI / Windows tools
+      │
+      └── outbound SignalR ─ ASP.NET Core Remote server ─ hosted React Remote UI
 ```
 
 - **Renderer:** React, TypeScript, Vite, Tailwind CSS, and shadcn/ui in
@@ -183,6 +204,8 @@ Rust backend ─ SQLite ─ Git / gh / az / Copilot CLI / Windows tools
 - **Copilot:** ACP over stdio for native chat, ConPTY for embedded terminals, or an
   external Windows Terminal process.
 - **Updates:** Signed Tauri updater artifacts published by GitHub Actions.
+- **Hosted Remote:** ASP.NET Core 8, self-hosted SignalR, and a React client deployed as
+  a single-replica Azure Container App.
 
 Repository operations are isolated by path, and slow CLI work runs outside the
 renderer. Timeouts are reported as errors rather than presented as successful
@@ -205,6 +228,11 @@ Repositories, worktrees, CLI authentication, and Copilot's own saved history rem
 independent of the app database. Analytics reads `~/.copilot/session-store.db`
 read-only, computes reports locally, and does not write analytics reports to disk or
 send prompts to an LLM.
+
+When hosted Remote Control is linked, the desktop stores the host credential in the
+Windows credential store. The Azure service persists link/account metadata but not
+tasks, repository paths, prompts, transcripts, or session history. Live relay payloads
+are visible to the server process in memory and must not be emitted to logs or telemetry.
 
 ## Build from source
 

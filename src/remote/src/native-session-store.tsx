@@ -9,6 +9,7 @@ import {
   type NativeAnswer,
   type NativeDraft,
   type NativeSnapshot,
+  type NativeSnapshotUpdate,
   type PlanTransitionAction,
   type PromptContent
 } from '@shared/native-session'
@@ -17,7 +18,7 @@ import {
   type TerminalSession,
   type TerminalTarget
 } from '@shared/terminal-session'
-import { remoteRequest } from './remote-api'
+import { remoteRequest, subscribeRemoteNativeSnapshots } from './remote-api'
 
 type RemoteNativeSessionsValue = {
   snapshots: Record<string, NativeSnapshot | undefined>
@@ -149,6 +150,26 @@ export function RemoteNativeSessionsProvider({
   }, [activeIdentity, refresh])
 
   React.useEffect(() => {
+    const refreshActive = (): void => {
+      for (const session of sessionsRef.current) {
+        if (
+          session.transport !== 'external' &&
+          !isTerminalSessionFinished(session.status)
+        ) {
+          void refresh(session).catch(() => undefined)
+        }
+      }
+    }
+    const unsubscribe = subscribeRemoteNativeSnapshots(
+      (snapshot: NativeSnapshotUpdate) => {
+        if (apply(snapshot)) return
+        const session = knownRef.current[snapshot.session.id]
+        if (session) void refresh(session).catch(() => undefined)
+      },
+      refreshActive
+    )
+    if (unsubscribe) return unsubscribe
+
     let active = true
     let polling = false
     const reconcile = async (): Promise<void> => {
@@ -178,7 +199,7 @@ export function RemoteNativeSessionsProvider({
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', visible)
     }
-  }, [refresh])
+  }, [apply, refresh])
 
   const setDraft = React.useCallback(
     (key: string, draft: NativeDraft | ((previous: NativeDraft) => NativeDraft)): void => {

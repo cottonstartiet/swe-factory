@@ -1,0 +1,291 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.47.16.16243",
+      "templateHash": "1849079814065239356"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for all remote-control resources."
+      }
+    },
+    "containerImage": {
+      "type": "string",
+      "metadata": {
+        "description": "Container image including tag."
+      }
+    },
+    "publicOrigin": {
+      "type": "string",
+      "metadata": {
+        "description": "Public HTTPS origin, for example https://remote.example.com."
+      }
+    },
+    "demoUserName": {
+      "type": "string",
+      "metadata": {
+        "description": "Demo login username."
+      }
+    },
+    "demoPasswordSha256": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Lowercase SHA-256 hash of the demo login password."
+      }
+    },
+    "demoSubject": {
+      "type": "string",
+      "defaultValue": "demo-user",
+      "metadata": {
+        "description": "Stable subject identifier used by the demo authentication provider."
+      }
+    },
+    "demoDisplayName": {
+      "type": "string",
+      "defaultValue": "Demo User",
+      "metadata": {
+        "description": "Display name shown for the demo account."
+      }
+    },
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "swe-factory-remote",
+      "minLength": 3,
+      "metadata": {
+        "description": "Resource name prefix."
+      }
+    }
+  },
+  "variables": {
+    "suffix": "[uniqueString(resourceGroup().id)]",
+    "storageName": "[take(format('swefactory{0}', variables('suffix')), 24)]",
+    "environmentName": "[format('{0}-env', parameters('namePrefix'))]",
+    "appName": "[format('{0}-app', parameters('namePrefix'))]",
+    "workspaceName": "[format('{0}-logs', parameters('namePrefix'))]",
+    "fileShareName": "remote-metadata"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('workspaceName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "retentionInDays": 30,
+        "sku": {
+          "name": "PerGB2018"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('storageName')]",
+      "location": "[parameters('location')]",
+      "kind": "StorageV2",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "properties": {
+        "allowBlobPublicAccess": false,
+        "allowSharedKeyAccess": true,
+        "minimumTlsVersion": "TLS1_2",
+        "supportsHttpsTrafficOnly": true
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/fileServices",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', variables('storageName'), 'default')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}/{2}', variables('storageName'), 'default', variables('fileShareName'))]",
+      "properties": {
+        "enabledProtocols": "SMB",
+        "shareQuota": 5
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/fileServices', variables('storageName'), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('environmentName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', variables('workspaceName')), '2023-09-01').customerId]",
+            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', variables('workspaceName')), '2023-09-01').primarySharedKey]"
+          }
+        },
+        "zoneRedundant": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('workspaceName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.App/managedEnvironments/storages",
+      "apiVersion": "2024-03-01",
+      "name": "[format('{0}/{1}', variables('environmentName'), 'metadata')]",
+      "properties": {
+        "azureFile": {
+          "accessMode": "ReadWrite",
+          "accountKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), '2023-05-01').keys[0].value]",
+          "accountName": "[variables('storageName')]",
+          "shareName": "[variables('fileShareName')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.App/managedEnvironments', variables('environmentName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', variables('storageName'), 'default', variables('fileShareName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('appName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', variables('environmentName'))]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "allowInsecure": false,
+            "external": true,
+            "targetPort": 8080,
+            "transport": "auto"
+          },
+          "secrets": [
+            {
+              "name": "demo-password-sha256",
+              "value": "[parameters('demoPasswordSha256')]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "remote-server",
+              "image": "[parameters('containerImage')]",
+              "env": [
+                {
+                  "name": "ASPNETCORE_ENVIRONMENT",
+                  "value": "Production"
+                },
+                {
+                  "name": "DemoAuth__UserName",
+                  "value": "[parameters('demoUserName')]"
+                },
+                {
+                  "name": "DemoAuth__PasswordSha256",
+                  "secretRef": "demo-password-sha256"
+                },
+                {
+                  "name": "DemoAuth__Subject",
+                  "value": "[parameters('demoSubject')]"
+                },
+                {
+                  "name": "DemoAuth__DisplayName",
+                  "value": "[parameters('demoDisplayName')]"
+                },
+                {
+                  "name": "RemoteServer__PublicOrigin",
+                  "value": "[parameters('publicOrigin')]"
+                },
+                {
+                  "name": "RemoteServer__DatabasePath",
+                  "value": "/app/data/remote.db"
+                },
+                {
+                  "name": "RemoteServer__RequireHttps",
+                  "value": "true"
+                }
+              ],
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/health/live",
+                    "port": 8080,
+                    "scheme": "HTTP"
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 20,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 3
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/health/ready",
+                    "port": 8080,
+                    "scheme": "HTTP"
+                  },
+                  "initialDelaySeconds": 5,
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 3
+                }
+              ],
+              "resources": {
+                "cpu": "[json('0.5')]",
+                "memory": "1Gi"
+              },
+              "volumeMounts": [
+                {
+                  "mountPath": "/app/data",
+                  "volumeName": "metadata"
+                }
+              ]
+            }
+          ],
+          "scale": {
+            "minReplicas": 1,
+            "maxReplicas": 1
+          },
+          "volumes": [
+            {
+              "name": "metadata",
+              "storageName": "metadata",
+              "storageType": "AzureFile"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.App/managedEnvironments', variables('environmentName'))]",
+        "[resourceId('Microsoft.App/managedEnvironments/storages', variables('environmentName'), 'metadata')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "remoteControlUrl": {
+      "type": "string",
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', variables('appName')), '2024-03-01').configuration.ingress.fqdn)]"
+    },
+    "containerAppName": {
+      "type": "string",
+      "value": "[variables('appName')]"
+    }
+  }
+}

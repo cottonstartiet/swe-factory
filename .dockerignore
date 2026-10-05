@@ -1,0 +1,12 @@
+.git
+.github
+.copilot
+node_modules
+dist
+dist-web
+src-tauri/target
+src/remote-server/bin
+src/remote-server/obj
+src/remote-server-tests/bin
+src/remote-server-tests/obj
+*.log

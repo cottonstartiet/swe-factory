@@ -1,0 +1,9 @@
+{
+  "protocolVersion": "1",
+  "type": "tasks.changed",
+  "sequence": 42,
+  "revision": 9,
+  "payload": {
+    "taskIds": ["task-01"]
+  }
+}

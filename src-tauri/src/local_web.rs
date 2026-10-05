@@ -1060,6 +1060,66 @@ fn server_error(error: AppError) -> Response {
         .into_response()
 }
 
+pub(crate) async fn execute_task_command(
+    app: AppHandle,
+    message_type: &str,
+    payload: Value,
+) -> Result<Value, AppError> {
+    let runtime = Arc::new(ServerRuntime {
+        app,
+        host: String::new(),
+        origin: String::new(),
+        pairing_secret: String::new(),
+        session_secret: String::new(),
+    });
+    let task_id = payload
+        .get("taskId")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let response = match message_type {
+        "tasks.create" => {
+            let body = serde_json::from_value::<CreateTaskBody>(payload)?;
+            create_task(State(runtime), Json(body)).await
+        }
+        "tasks.update" => {
+            let id = task_id.ok_or_else(|| AppError::msg("Task id is required."))?;
+            let body = serde_json::from_value::<UpdateTaskBody>(payload)?;
+            update_task(State(runtime), Path(id), Json(body)).await
+        }
+        "tasks.move" => {
+            let id = task_id.ok_or_else(|| AppError::msg("Task id is required."))?;
+            let body = serde_json::from_value::<MoveTaskBody>(payload)?;
+            move_task(State(runtime), Path(id), Json(body)).await
+        }
+        "tasks.delete" => {
+            let id = task_id.ok_or_else(|| AppError::msg("Task id is required."))?;
+            delete_task(State(runtime), Path(id)).await
+        }
+        "tasks.start" => {
+            let id = task_id.ok_or_else(|| AppError::msg("Task id is required."))?;
+            start_task(State(runtime), Path(id)).await
+        }
+        _ => {
+            return Err(AppError::msg(format!(
+                "Unsupported remote task command: {message_type}"
+            )))
+        }
+    };
+    let status = response.status();
+    let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .map_err(|error| AppError::msg(format!("Could not read remote task response: {error}")))?;
+    let text = String::from_utf8_lossy(&bytes);
+    if !status.is_success() {
+        return Err(AppError::msg(if text.trim().is_empty() {
+            format!("Remote task command failed ({status}).")
+        } else {
+            text.into_owned()
+        }));
+    }
+    serde_json::from_slice(&bytes).map_err(AppError::from)
+}
+
 fn router(runtime: Arc<ServerRuntime>, assets: PathBuf) -> Router {
     Router::new()
         .route("/api/pair", post(pair))

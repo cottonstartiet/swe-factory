@@ -13,6 +13,7 @@
  */
 import { invoke } from '@tauri-apps/api/core'
 import type { TerminalTarget } from '@shared/terminal-session'
+import type { RemoteControlStatus } from '@shared/remote-control'
 import type {
   CopilotPermissionProfile,
   CreateSavedPromptRequest,
@@ -413,6 +414,14 @@ const api = {
     start: (): Promise<LocalWebStatus> => invoke('local_web_start'),
     status: (): Promise<LocalWebStatus> => invoke('local_web_status'),
     stop: (): Promise<LocalWebStatus> => invoke('local_web_stop')
+  },
+  remoteControl: {
+    beginLink: (serverUrl: string): Promise<RemoteControlStatus> =>
+      invoke('remote_control_begin_link', { serverUrl }),
+    completeLink: (): Promise<RemoteControlStatus> => invoke('remote_control_complete_link'),
+    acceptLink: (): Promise<RemoteControlStatus> => invoke('remote_control_accept_link'),
+    status: (): Promise<RemoteControlStatus> => invoke('remote_control_status'),
+    unlink: (): Promise<RemoteControlStatus> => invoke('remote_control_unlink')
   },
   settings: {
     sessionLaunchMode: (): Promise<SessionLaunchMode> => invoke('settings_session_launch_mode'),

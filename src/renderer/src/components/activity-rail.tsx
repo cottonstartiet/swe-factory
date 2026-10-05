@@ -7,7 +7,7 @@ import {
   HistoryIcon,
   KanbanSquareIcon,
   LineChartIcon,
-  QrCodeIcon,
+  RadioTowerIcon,
   SettingsIcon,
   SquareTerminalIcon
 } from 'lucide-react'
@@ -17,6 +17,7 @@ import type { AppView } from '@/components/app-sidebar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useTerminalSessions } from '@/contexts/terminal-sessions-context'
 import { LocalWebDialog } from '@/components/local-web-dialog'
+import { RemoteControlDialog } from '@/components/remote-control-dialog'
 import { cn } from '@/lib/utils'
 import { isTerminalSessionFinished } from '@shared/terminal-session'
 import { nativeSessionNeedsUserAction } from '@shared/native-session'
@@ -140,7 +141,7 @@ export function ActivityRail({
   const [keepAwakeEnabled, setKeepAwakeEnabled] = React.useState(false)
   const [keepAwakePending, setKeepAwakePending] = React.useState(true)
   const [localWebOpen, setLocalWebOpen] = React.useState(false)
-  const [localWebRunning, setLocalWebRunning] = React.useState(false)
+  const [remoteControlOpen, setRemoteControlOpen] = React.useState(false)
   const sessionsNeedingAction = React.useMemo(
     () =>
       sessions.filter((session) => {
@@ -199,21 +200,18 @@ export function ActivityRail({
       <div className="mt-auto flex flex-col gap-1">
         <button
           type="button"
-          aria-label={`Local web UI: ${localWebRunning ? 'running' : 'stopped'}`}
-          aria-pressed={localWebOpen}
-          onClick={() => setLocalWebOpen(true)}
+          aria-label="Remote control"
+          aria-pressed={remoteControlOpen}
+          onClick={() => setRemoteControlOpen(true)}
           className={cn(
             'relative flex w-14 flex-col items-center gap-0.5 rounded-md py-1.5 text-sidebar-foreground/65 transition-colors',
             'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
             'focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/50',
-            localWebRunning && 'bg-sidebar-accent text-sidebar-accent-foreground'
+            remoteControlOpen && 'bg-sidebar-accent text-sidebar-accent-foreground'
           )}
         >
           <span className="relative">
-            <QrCodeIcon className="size-5" />
-            {localWebRunning ? (
-              <span className="ring-sidebar absolute -top-1 -right-1 size-2.5 rounded-full bg-emerald-500 ring-2" />
-            ) : null}
+            <RadioTowerIcon className="size-5" />
           </span>
           <span className="max-w-full truncate text-[10px] leading-none font-medium">Remote</span>
         </button>
@@ -230,10 +228,15 @@ export function ActivityRail({
           onSelect={onSelect}
         />
       </div>
+      <RemoteControlDialog
+        open={remoteControlOpen}
+        onOpenChange={setRemoteControlOpen}
+        onOpenLocalWeb={() => setLocalWebOpen(true)}
+      />
       <LocalWebDialog
         open={localWebOpen}
         onOpenChange={setLocalWebOpen}
-        onStatusChange={(status) => setLocalWebRunning(status.running)}
+        onStatusChange={() => undefined}
       />
     </nav>
   )

@@ -1,6 +1,7 @@
 mod ado;
 mod az;
 mod command;
+mod cloud_remote;
 mod copilot_acp_sessions;
 mod copilot_analytics;
 mod copilot_history;
@@ -17,10 +18,12 @@ mod pr_review;
 mod process;
 mod repo;
 mod repositories;
+mod remote_control;
 mod reviews;
 mod session_attention;
 mod session_interactions;
 mod settings;
+mod signalr_transport;
 mod system;
 mod tasks;
 mod terminal_sessions;
@@ -76,6 +79,7 @@ pub fn run() {
             app.manage(terminal_sessions::AcpSessionManager::default());
             app.manage(copilot_acp_sessions::SessionManager::default());
             app.manage(local_web::LocalWebState::default());
+            app.manage(cloud_remote::CloudRemoteState::default());
             if let Err(e) = tasks::cleanup_attachment_storage(app.handle()) {
                 eprintln!("failed to clean task attachment storage: {e}");
             }
@@ -88,6 +92,7 @@ pub fn run() {
             if let Err(e) = tasks::reconcile_run_claims(app.handle()) {
                 eprintln!("failed to reconcile task run claims: {e}");
             }
+            cloud_remote::initialize(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -113,6 +118,11 @@ pub fn run() {
             local_web::local_web_start,
             local_web::local_web_status,
             local_web::local_web_stop,
+            cloud_remote::remote_control_begin_link,
+            cloud_remote::remote_control_complete_link,
+            cloud_remote::remote_control_accept_link,
+            cloud_remote::remote_control_status,
+            cloud_remote::remote_control_unlink,
             settings::settings_session_launch_mode,
             settings::settings_set_session_launch_mode,
             settings::settings_copilot_permission_profile,
@@ -210,6 +220,7 @@ pub fn run() {
             if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
                 app.state::<system::KeepAwakeState>().shutdown();
                 local_web::shutdown(app);
+                cloud_remote::shutdown(app);
                 embedded_terminals::shutdown(app);
             }
             if let tauri::RunEvent::ExitRequested { api, .. } = &event {
@@ -237,6 +248,7 @@ pub fn run() {
             if matches!(event, tauri::RunEvent::Exit) {
                 app.state::<system::KeepAwakeState>().shutdown();
                 local_web::shutdown(app);
+                cloud_remote::shutdown(app);
                 embedded_terminals::shutdown(app);
                 tauri::async_runtime::block_on(copilot_acp_sessions::shutdown(app));
             }

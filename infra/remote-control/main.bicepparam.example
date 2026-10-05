@@ -1,0 +1,6 @@
+using './main.bicep'
+
+param containerImage = 'example.azurecr.io/swe-factory-remote:latest'
+param publicOrigin = 'https://remote.example.com'
+param demoUserName = 'demo'
+param demoPasswordSha256 = '<sha256>'

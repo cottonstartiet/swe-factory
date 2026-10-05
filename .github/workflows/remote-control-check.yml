@@ -1,0 +1,88 @@
+name: Remote Control Check
+
+on:
+  pull_request:
+    paths:
+      - 'contracts/remote-control/**'
+      - 'infra/remote-control/**'
+      - 'src/remote/**'
+      - 'src/remote-server/**'
+      - 'src/remote-server-tests/**'
+      - 'src/shared/remote-control.ts'
+      - 'src-tauri/**'
+      - 'scripts/remote-control-contract.test.mjs'
+      - 'package.json'
+      - 'yarn.lock'
+      - '.github/workflows/remote-control-check.yml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Enable Corepack
+        shell: pwsh
+        run: corepack enable
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install frontend dependencies
+        shell: pwsh
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+        run: yarn install --frozen-lockfile
+
+      - name: Check frontend and protocol
+        shell: pwsh
+        run: |
+          yarn typecheck:web
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          yarn build:remote
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test scripts\remote-control-contract.test.mjs
+
+      - name: Test remote server
+        shell: pwsh
+        run: dotnet test src\remote-server-tests\SweFactory.Remote.Server.Tests.csproj
+
+      - name: Test desktop contracts
+        shell: pwsh
+        run: cargo test --manifest-path src-tauri\Cargo.toml --lib --locked
+
+      - name: Validate Container Apps template
+        shell: pwsh
+        run: az bicep build --file infra\remote-control\main.bicep
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Build hosted remote assets
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+        run: |
+          yarn install --frozen-lockfile
+          yarn build:remote
+
+      - name: Build remote server container
+        run: docker build -f src/remote-server/Dockerfile -t swe-factory-remote:check .

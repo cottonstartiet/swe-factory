@@ -1,0 +1,11 @@
+{
+  "id": "command-01",
+  "protocolVersion": "1",
+  "type": "sessions.prompt",
+  "expectedRevision": 7,
+  "payload": {
+    "sessionId": "session-01",
+    "generation": "generation-01",
+    "prompt": "Run the focused tests."
+  }
+}

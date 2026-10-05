@@ -31,15 +31,19 @@ import {
 } from '@shared/terminal-session'
 import type { Worktree } from '@shared/worktree'
 import { RemoteNativeSessionsProvider, useRemoteNativeSessions } from './native-session-store'
-import { remoteRequest as request } from './remote-api'
+import {
+  detectRemoteMode,
+  remoteRequest as request,
+  subscribeRemoteSnapshots,
+  type RemoteMode
+} from './remote-api'
+import { CloudGate, CloudHostSelect } from './cloud-gate'
 import { sessionCardPresentation } from './session-card-presentation'
 import { RemotePlanCompletion, RemoteSessionInteraction } from './session-interaction'
 import { RemoteTimelineEntry } from './session-timeline-entry'
 import { remoteTimelinePresentation } from './session-timeline-presentation'
 
 type View = 'dashboard' | 'tasks' | 'sessions'
-type SocketSnapshot = { type: 'snapshot'; tasks: Task[]; sessions: TerminalSession[] }
-
 const STATUSES: readonly TaskStatus[] = ['todo', 'in_progress', 'review', 'done']
 const STATUS_LABEL: Record<TaskStatus, string> = {
   todo: 'To Do',
@@ -81,7 +85,7 @@ function StatusDot({ status }: { status: TerminalSession['status'] }): React.JSX
   return <span className={`size-2 shrink-0 rounded-full ${tone}`} />
 }
 
-function PairingGate({ children }: { children: React.ReactNode }): React.JSX.Element {
+function LanPairingGate({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [state, setState] = React.useState<'pairing' | 'ready' | 'expired' | 'error'>('pairing')
   const [message, setMessage] = React.useState('')
 
@@ -123,6 +127,25 @@ function PairingGate({ children }: { children: React.ReactNode }): React.JSX.Ele
         </div>
       </div>
     </main>
+  )
+}
+
+function RemoteGate({ children }: { children: React.ReactNode }): React.JSX.Element {
+  const [mode, setMode] = React.useState<RemoteMode>('detecting')
+  React.useEffect(() => {
+    void detectRemoteMode().then(setMode)
+  }, [])
+  if (mode === 'detecting') {
+    return (
+      <main className="flex min-h-svh items-center justify-center bg-background">
+        <LoaderCircleIcon className="size-8 animate-spin text-muted-foreground" />
+      </main>
+    )
+  }
+  return mode === 'cloud' ? (
+    <CloudGate>{children}</CloudGate>
+  ) : (
+    <LanPairingGate>{children}</LanPairingGate>
   )
 }
 
@@ -994,35 +1017,13 @@ function AppContent(): React.JSX.Element {
         setError(loadError instanceof Error ? loadError.message : 'Could not load SWE Factory.')
       )
     })
-    let socket: WebSocket | null = null
-    let retry = 0
-    let stopped = false
-    const connect = (): void => {
-      socket = new WebSocket(
-        `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/events`
-      )
-      socket.onopen = () => {
-        retry = 0
-        setConnected(true)
-        setError('')
-      }
-      socket.onmessage = (event) => {
-        const payload = JSON.parse(String(event.data)) as SocketSnapshot
-        if (payload.type === 'snapshot') {
-          setTasks(payload.tasks)
-          setSessions(payload.sessions)
-        }
-      }
-      socket.onclose = () => {
-        setConnected(false)
-        if (!stopped) window.setTimeout(connect, Math.min(1000 * 2 ** retry++, 10000))
-      }
-    }
-    connect()
-    return () => {
-      stopped = true
-      socket?.close()
-    }
+    const unsubscribe = subscribeRemoteSnapshots((snapshot) => {
+      setConnected(true)
+      setError('')
+      setTasks(snapshot.tasks)
+      setSessions(snapshot.sessions)
+    })
+    return unsubscribe
   }, [refresh])
 
   const openSession = (id: string, requestId?: string): void => {
@@ -1057,6 +1058,7 @@ function AppContent(): React.JSX.Element {
             )}
             {connected ? 'Live' : 'Reconnecting'}
           </span>
+          <CloudHostSelect />
           <button
             onClick={() => void refresh()}
             aria-label="Refresh"
@@ -1114,8 +1116,8 @@ function AppContent(): React.JSX.Element {
 
 export function RemoteApp(): React.JSX.Element {
   return (
-    <PairingGate>
+    <RemoteGate>
       <AppContent />
-    </PairingGate>
+    </RemoteGate>
   )
 }
