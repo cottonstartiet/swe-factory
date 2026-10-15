@@ -145,6 +145,26 @@ export function nativeSessionPresentationStatus(
   return nativeSessionNeedsUserAction(session, snapshot) ? 'waiting-input' : session.status
 }
 
+export function latestNativeAssistantResponse(
+  session: TerminalSession,
+  snapshot?: NativeSnapshot
+): string | null {
+  if (
+    !snapshot ||
+    snapshot.session.id !== session.id ||
+    snapshot.session.generation !== session.generation
+  ) {
+    return null
+  }
+  for (let index = snapshot.entries.length - 1; index >= 0; index--) {
+    const entry = snapshot.entries[index]
+    if (entry.kind !== 'assistantMessage') continue
+    const response = text(entry.text)
+    if (response) return response
+  }
+  return null
+}
+
 export function nativeSessionCanReplyToPlan(
   session: TerminalSession,
   snapshot?: NativeSnapshot
