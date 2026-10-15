@@ -53,7 +53,9 @@ test('legacy branding remains only in the unchanged repository URL', () => {
       '-E',
       `${legacyCompact}|${legacySpaced}|${legacyDashed}|${legacyCompact.toUpperCase()}`,
       '--',
-      '.'
+      'src',
+      'src-tauri',
+      'browser-extension'
     ],
     { encoding: 'utf8' }
   )

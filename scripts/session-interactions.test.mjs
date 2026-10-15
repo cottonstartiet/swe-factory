@@ -213,12 +213,12 @@ test('ACP permission choices expose one-time and remembered scope accurately', (
   assert.equal(acpPermissionOptionScope('allow_once'), 'Allows only this operation.')
   assert.equal(
     acpPermissionOptionScope('allow_always'),
-    'Copilot remembers this choice for matching requests.'
+    'Copilot saves this project-scoped approval for matching requests when supported.'
   )
   assert.equal(acpPermissionOptionScope('reject_once'), 'Rejects only this operation.')
   assert.equal(
     acpPermissionOptionScope('reject_always'),
-    'Copilot remembers this rejection for matching requests.'
+    'Copilot saves this project-scoped rejection for matching requests when supported.'
   )
   assert.equal(
     acpPermissionOptionScope('future_scope'),
