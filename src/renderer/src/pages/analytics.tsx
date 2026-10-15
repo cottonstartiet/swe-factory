@@ -17,6 +17,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCopilotAnalytics } from '@/hooks/use-copilot-analytics'
+import { useDailyFindings } from '@/hooks/use-daily-findings'
 import { useCopilotLauncher } from '@/lib/copilot-launch'
 import { cn } from '@/lib/utils'
 import type { Repository } from '@shared/repository'
@@ -40,6 +41,7 @@ export function AnalyticsPage({ repositories }: { repositories: Repository[] }):
     repository,
     setRepository
   } = useCopilotAnalytics()
+  const daily = useDailyFindings(summary, windowDays, repository, refresh)
   const launchCopilot = useCopilotLauncher()
   const [commandRepo, setCommandRepo] = useState('')
   const [launching, setLaunching] = useState(false)
@@ -181,12 +183,16 @@ export function AnalyticsPage({ repositories }: { repositories: Repository[] }):
               </p>
               <TabsContent value="overview" className="space-y-4">
                 <OverviewPanel summary={summary} />
-                {summary.practices.findings.length ? (
+                {daily.findings.length ? (
                   <Section
                     title="Worth a look"
-                    description="Top local coaching observations. Open Practices for explanations and private examples."
+                    description={`Top local coaching observations, recalculated daily${
+                      daily.generatedAt
+                        ? ` (last updated ${new Date(daily.generatedAt).toLocaleDateString()})`
+                        : ''
+                    }. Open Practices for explanations and private examples.`}
                   >
-                    <Findings findings={summary.practices.findings.slice(0, 3)} />
+                    <Findings findings={daily.findings} />
                   </Section>
                 ) : null}
               </TabsContent>
